@@ -1,0 +1,96 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ec2_host:
+        description: "Public IP of the live EC2 instance to deploy to"
+        required: true
+        type: string
+
+jobs:
+  # Builds each Dockerfile in isolation, in parallel, so a break in one
+  # image is reported against that image specifically rather than buried
+  # inside a full `make all` log.
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image:
+          - name: ds_load_balancer
+            context: ./project
+            dockerfile: ./project/Dockerfile
+          - name: ds_shard_manager
+            context: ./project/shard_manager
+            dockerfile: ./project/shard_manager/Dockerfile
+          - name: ds_server
+            context: ./project/server
+            dockerfile: ./project/server/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.image.name }}
+        run: >
+          docker build -t ${{ matrix.image.name }}:ci
+          -f ${{ matrix.image.dockerfile }}
+          --platform linux/x86_64
+          ${{ matrix.image.context }}
+
+  # Runs the exact same `make all` used locally, then confirms the stack
+  # actually answers requests - a passing `build` job only proves the
+  # images compile, not that the compose stack boots correctly together.
+  smoke-test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: make all
+        run: cd project && make all
+
+      - name: Wait for /status to respond
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:5000/status; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "load balancer never became reachable"
+          exit 1
+
+      - name: make clean
+        if: always()
+        run: cd project && make clean
+
+  # Redeploys to a live EC2 instance by re-running the same Ansible
+  # playbook used for manual deploys - not a separate, one-off SSH script.
+  # Only runs when manually triggered via workflow_dispatch (see the
+  # `if:` below), never on a normal push, since we destroy the instance
+  # between sessions and a push-triggered deploy would fail every time
+  # there's nothing to deploy to.
+  deploy:
+    needs: [build, smoke-test]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Write SSH private key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/lb-devops-key
+          chmod 600 ~/.ssh/lb-devops-key
+
+      - name: Write inventory
+        run: |
+          echo "[app]" > ansible/inventory/hosts.ini
+          echo "${{ inputs.ec2_host }}" >> ansible/inventory/hosts.ini
+
+      - name: Run playbook
+        run: cd ansible && ANSIBLE_CONFIG=./ansible.cfg ansible-playbook playbook.yml
