@@ -75,8 +75,50 @@ jobs:
     needs: [build, smoke-test]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ap-southeast-2
     steps:
       - uses: actions/checkout@v4
+
+      # Credentials for a narrowly-scoped IAM user (terraform/ci_iam.tf)
+      # that can only authorize/revoke ingress on this one security group -
+      # not the broader terraform-deploy permissions.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # The security group's ID changes every time Terraform recreates it,
+      # but its name (derived from var.project_name) is stable - look it
+      # up by name rather than hardcoding an ID that would go stale.
+      - name: Look up the security group
+        id: sg
+        run: |
+          SG_ID=$(aws ec2 describe-security-groups \
+            --filters Name=group-name,Values=lb-devops-sg \
+            --query 'SecurityGroups[0].GroupId' --output text)
+          echo "id=$SG_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Get this runner's public IP
+        id: runner_ip
+        run: echo "ip=$(curl -s https://checkip.amazonaws.com)" >> "$GITHUB_OUTPUT"
+
+      # GitHub-hosted runners come from a large, constantly-changing IP
+      # pool - there's no fixed range worth allowlisting permanently.
+      # Instead we open the security group for exactly this run's own IP,
+      # only for the few minutes the deploy takes, then close it again
+      # below. If this step's revoke is ever skipped (e.g. the job is
+      # killed), the next `terraform apply` will still remove any leftover
+      # rule automatically - Terraform treats aws_security_group.app as
+      # authoritative over its own rule set.
+      - name: Temporarily allow SSH from this runner
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ steps.sg.outputs.id }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ steps.runner_ip.outputs.ip }}/32
 
       - name: Install Ansible
         run: pip install ansible
@@ -94,3 +136,13 @@ jobs:
 
       - name: Run playbook
         run: cd ansible && ANSIBLE_CONFIG=./ansible.cfg ansible-playbook playbook.yml
+
+      # Runs even if the playbook step failed, so a broken deploy never
+      # leaves SSH open to this runner's IP indefinitely.
+      - name: Revoke temporary SSH access
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ steps.sg.outputs.id }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ steps.runner_ip.outputs.ip }}/32
