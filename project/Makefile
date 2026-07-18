@@ -7,10 +7,13 @@ all:
 
 clean:
 	docker compose down --rmi all
-	docker stop $$(docker ps -a -q)
-	docker rm $$(docker ps -a -q)
-	docker network rm pub
-	docker image rm ds_server:latest
+	@containers=$$(docker ps -a -q); \
+	if [ -n "$$containers" ]; then \
+		docker stop $$containers; \
+		docker rm $$containers; \
+	fi
+	-docker network rm pub
+	-docker image rm ds_server:latest
 
 restart:
 	make clean ; make all
