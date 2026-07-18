@@ -1,0 +1,6 @@
+# Copy this file to terraform.tfvars and fill in your own values.
+# terraform.tfvars is gitignored - it's environment-specific (your IP,
+# your key path) and shouldn't be committed.
+
+allowed_ssh_cidr    = "YOUR_PUBLIC_IP/32" # e.g. curl -s https://checkip.amazonaws.com
+ssh_public_key_path = "~/.ssh/lb-devops-key.pub"

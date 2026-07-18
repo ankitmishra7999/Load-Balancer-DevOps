@@ -1,0 +1,26 @@
+---
+# Entry point: `ansible-playbook playbook.yml`
+#
+# Split into three plays (not one play running three roles back to back)
+# so `become` can differ per stage: hardening and docker need root to
+# install packages and edit system config, deploy deliberately doesn't -
+# it runs as ubuntu, relying on the docker group membership the docker
+# role just set up.
+
+- name: Harden the host
+  hosts: app
+  become: true
+  roles:
+    - hardening
+
+- name: Install Docker, Compose, and Make
+  hosts: app
+  become: true
+  roles:
+    - docker
+
+- name: Deploy the application
+  hosts: app
+  become: false
+  roles:
+    - deploy

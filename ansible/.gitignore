@@ -1,0 +1,5 @@
+# The real inventory contains a live IP for a specific deployment -
+# regenerate it with ./update_inventory.sh rather than committing it.
+inventory/hosts.ini
+
+*.retry

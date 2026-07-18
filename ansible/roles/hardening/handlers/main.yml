@@ -1,0 +1,10 @@
+---
+# Handlers only run once, at the end of the play, and only if a task above
+# actually `notify`-ed them - so sshd gets reloaded exactly once even
+# though two tasks above could both trigger it, and not at all if neither
+# setting actually changed (idempotent reruns don't bounce the SSH
+# connection Ansible itself is using, for no reason).
+- name: Restart sshd
+  ansible.builtin.systemd:
+    name: ssh
+    state: restarted

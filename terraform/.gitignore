@@ -1,0 +1,14 @@
+# Local Terraform state and working directory - contains resource IDs and
+# should never be committed (and would conflict with anyone else applying).
+# Note: .terraform.lock.hcl is deliberately NOT ignored - HashiCorp
+# recommends committing it so everyone resolves the same provider version.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+tfplan.out
+
+# Environment-specific, not something to share/commit.
+terraform.tfvars
+*.auto.tfvars

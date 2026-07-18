@@ -1,0 +1,5 @@
+# Copy this to hosts.ini (gitignored) after `terraform apply`, or just run
+# ../update_inventory.sh which does this for you automatically by reading
+# the instance_public_ip output straight from Terraform state.
+[app]
+REPLACE_WITH_INSTANCE_PUBLIC_IP

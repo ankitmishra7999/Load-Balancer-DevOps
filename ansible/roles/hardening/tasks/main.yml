@@ -1,0 +1,73 @@
+---
+# Each task has a `name:` - that's not decoration, it's what Ansible prints
+# as it runs and what you'd point to in an interview to explain what a
+# given step does and why.
+
+- name: Update apt package index
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade all packages to latest security/bugfix versions
+  ansible.builtin.apt:
+    upgrade: dist
+
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+
+- name: Enable automatic security updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"
+
+# Password auth was never usable anyway (the ubuntu user has no password
+# set, only the key from aws_key_pair) - this makes that fact an explicit,
+# enforced setting instead of an accident of how the AMI happens to be
+# configured today.
+- name: Disable SSH password authentication
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PasswordAuthentication"
+    line: "PasswordAuthentication no"
+  notify: Restart sshd
+
+- name: Disable SSH root login
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitRootLogin"
+    line: "PermitRootLogin no"
+  notify: Restart sshd
+
+- name: Install ufw
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+
+# Allow SSH before anything else touches ufw's default-deny policy - doing
+# this out of order would cut off the very connection Ansible is using.
+- name: Allow SSH through ufw
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow the app port through ufw
+  community.general.ufw:
+    rule: allow
+    port: "{{ app_port }}"
+    proto: tcp
+
+# A second, OS-level firewall behind the AWS security group. The two are
+# independent: the SG is enforced by AWS's network layer outside the
+# instance, ufw is enforced by the kernel inside it. Redundant on purpose -
+# a security-group misconfiguration doesn't leave the box wide open.
+- name: Enable ufw with default-deny incoming
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming

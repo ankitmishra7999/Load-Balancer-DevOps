@@ -1,0 +1,10 @@
+---
+# Variables available to every play/role in this run - equivalent in spirit
+# to Terraform's variables.tf, just Ansible's convention for it.
+
+repo_url: https://github.com/ankitmishra7999/Load-Balancer-DevOps.git
+app_dir: /home/ubuntu/Load-Balancer-DevOps
+
+# Must match terraform/variables.tf's app_port - the one port the security
+# group opens besides SSH.
+app_port: 5000
