@@ -8,3 +8,6 @@ app_dir: /home/ubuntu/Load-Balancer-DevOps
 # Must match terraform/variables.tf's app_port - the one port the security
 # group opens besides SSH.
 app_port: 5000
+
+# Must match terraform/variables.tf's grafana_port.
+grafana_port: 3000

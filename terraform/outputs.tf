@@ -12,3 +12,8 @@ output "app_url" {
   description = "URL for the load balancer's /status endpoint once containers are up (run `make all` on the instance first)."
   value       = "http://${aws_instance.app.public_ip}:${var.app_port}/status"
 }
+
+output "grafana_url" {
+  description = "Grafana UI - log in as admin with the password Ansible generated (see ansible/roles/monitoring)."
+  value       = "http://${aws_instance.app.public_ip}:${var.grafana_port}"
+}

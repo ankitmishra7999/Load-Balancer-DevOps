@@ -1,11 +1,47 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, g
 import uuid
 import requests
 import os
 import time
 import threading
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 app = Flask(__name__)
+
+# Total incoming throughput/latency at the entry point. No `shard` label
+# here - which shard a request belongs to is only decided inside each
+# handler (via ShardMap.getShardIdFromStudId), not available generically
+# in a before_request hook. Per-shard breakdown lives in server.py's
+# metrics instead, on the containers that actually know their shard.
+REQUEST_COUNT = Counter(
+    "http_requests_total",
+    "Total HTTP requests handled by the load balancer",
+    ["endpoint", "method", "status"],
+)
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds",
+    "Request duration in seconds",
+    ["endpoint", "method"],
+)
+
+
+@app.before_request
+def start_timer():
+    g.start_time = time.time()
+
+
+@app.after_request
+def record_metrics(response):
+    duration = time.time() - g.start_time
+    endpoint = request.endpoint or "unmatched"
+    REQUEST_LATENCY.labels(endpoint, request.method).observe(duration)
+    REQUEST_COUNT.labels(endpoint, request.method, response.status_code).inc()
+    return response
+
+
+@app.route("/metrics", methods=["GET"])
+def metrics():
+    return generate_latest(), 200, {"Content-Type": CONTENT_TYPE_LATEST}
 
 
 def generate_random_id():
@@ -432,7 +468,7 @@ def init():
     for server_name, shards in payload["servers"].items():
         try:
             res = os.popen(
-                f"sudo docker run --platform linux/x86_64 --name {server_name} --network pub --network-alias {server_name} -d ds_server:latest"
+                f"sudo docker run --platform linux/x86_64 --name {server_name} --network pub --network-alias {server_name} --label monitoring=true -d ds_server:latest"
             ).read()
 
             if len(res) == 0:

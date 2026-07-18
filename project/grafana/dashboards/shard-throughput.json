@@ -1,0 +1,86 @@
+{
+  "title": "Shard Throughput & Latency",
+  "uid": "shard-throughput",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request throughput per shard",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (shard) (rate(http_requests_total{job=\"docker-containers\"}[1m]))",
+          "legendFormat": "{{shard}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "p95 read/write latency per shard",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, sum by (le, shard) (rate(http_request_duration_seconds_bucket{job=\"docker-containers\", endpoint=~\"read|write|update|delete\"}[1m])))",
+          "legendFormat": "{{shard}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Throughput per replica (per shard)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (instance, shard) (rate(http_requests_total{job=\"docker-containers\", shard!=\"n/a\"}[1m]))",
+          "legendFormat": "{{instance}} / {{shard}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Total load balancer throughput",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (endpoint) (rate(http_requests_total{job=\"docker-containers\", instance=\"load_balancer_1\"}[1m]))",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

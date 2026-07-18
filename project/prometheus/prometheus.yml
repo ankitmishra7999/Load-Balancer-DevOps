@@ -1,0 +1,53 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  # ds_server replicas are created/destroyed at runtime by /init, /add and
+  # /rm, with names chosen by whoever calls those endpoints - there's no
+  # fixed list of targets to write down. Docker service discovery asks the
+  # Docker daemon (via the same docker.sock the load balancer already uses
+  # to spawn containers) what's running right now, on every scrape.
+  - job_name: "docker-containers"
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+
+    relabel_configs:
+      # Only targets on the `pub` network - excludes anything unrelated
+      # that might be running elsewhere on the host.
+      - source_labels: [__meta_docker_network_name]
+        regex: pub
+        action: keep
+
+      # Only containers carrying the monitoring=true Docker label - not
+      # Prometheus/Grafana themselves. Filtering by container *name*
+      # wasn't an option: server names are caller-supplied at /init or
+      # /add time and follow no fixed pattern. Filtering by image also
+      # doesn't work - Docker SD doesn't expose an image-name meta label
+      # at all (verified by inspecting Prometheus's own dropped-targets
+      # output), only per-container labels, which is why the label was
+      # added explicitly (docker-compose.yml, and the `docker run`
+      # commands in load_balancer.py/shard_manager.py) rather than
+      # inferred from anything already there.
+      - source_labels: [__meta_docker_container_label_monitoring]
+        regex: "true"
+        action: keep
+
+      # ds_server containers are built FROM mysql:8.0-debian, which also
+      # exposes MySQL's ports (3306, 33060) - Docker SD discovers one
+      # target per exposed port per container, so without this the same
+      # container would show up 3 times. Keep only the port our Flask
+      # apps actually listen on.
+      - source_labels: [__meta_docker_port_private]
+        regex: "5000"
+        action: keep
+
+      - source_labels: [__meta_docker_network_ip]
+        target_label: __address__
+        replacement: "${1}:5000"
+
+      # Container name (with Docker's leading "/" stripped) becomes the
+      # `instance` label - this is what distinguishes one replica of a
+      # shard from another in Grafana.
+      - source_labels: [__meta_docker_container_name]
+        regex: "/(.*)"
+        target_label: instance

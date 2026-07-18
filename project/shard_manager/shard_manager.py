@@ -37,7 +37,7 @@ def periodic_heart_beat():
 
             try:
                 res = os.popen(
-                    f"sudo docker stop {server} ; sudo docker rm {server} ; sudo docker run --platform linux/x86_64 --name {server} --network pub --network-alias {server} -d ds_server:latest"
+                    f"sudo docker stop {server} ; sudo docker rm {server} ; sudo docker run --platform linux/x86_64 --name {server} --network pub --network-alias {server} --label monitoring=true -d ds_server:latest"
                 ).read()
                 if len(res) == 0:
                     raise

@@ -48,8 +48,17 @@ resource "aws_key_pair" "deployer" {
 #             ds_server containers all stay on the internal Docker
 #             network `pub` and are never reachable from outside the
 #             instance, so they need no ingress rule here.
+#   - 3000 -> Grafana's UI (also port-mapped to the host in
+#             docker-compose.yml). Prometheus (9090) is deliberately not
+#             listed here - Grafana reaches it over the internal `pub`
+#             network, it's never exposed to the host/internet.
 resource "aws_security_group" "app" {
-  name        = "${var.project_name}-sg"
+  name = "${var.project_name}-sg"
+  # AWS treats this description as immutable - changing this string after
+  # creation forces a full destroy+recreate of the security group, so it's
+  # deliberately left as the original text rather than kept in sync with
+  # every port added since (see the ingress-by-ingress comments above
+  # instead, which cost nothing to update).
   description = "Allow SSH (restricted) and the load balancer app port only"
   vpc_id      = data.aws_vpc.default.id
 
@@ -65,6 +74,14 @@ resource "aws_security_group" "app" {
     description = "Load balancer HTTP API"
     from_port   = var.app_port
     to_port     = var.app_port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Grafana UI"
+    from_port   = var.grafana_port
+    to_port     = var.grafana_port
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }

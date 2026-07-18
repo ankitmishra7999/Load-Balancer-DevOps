@@ -61,3 +61,14 @@ variable "app_port" {
   type        = number
   default     = 5000
 }
+
+variable "grafana_port" {
+  description = <<-EOT
+    Port Grafana's UI listens on - must match docker-compose.yml
+    (currently 3000:3000). Prometheus's own UI (9090) is deliberately not
+    given a variable here - it stays internal-only, reachable from Grafana
+    over the `pub` Docker network but never exposed to the host/internet.
+  EOT
+  type        = number
+  default     = 3000
+}

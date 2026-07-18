@@ -1,0 +1,11 @@
+apiVersion: 1
+
+# Points Grafana at a folder of dashboard JSON files to load automatically
+# on startup - the dashboard is provisioned from source, not clicked
+# together by hand in the UI.
+providers:
+  - name: default
+    folder: ""
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

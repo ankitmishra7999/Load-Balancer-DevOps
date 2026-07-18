@@ -12,6 +12,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     # This share host’s the docker daemon with the container. Now, the container can spawn other containers just like host
     privileged: true # This should be true to share the docker daemon
+    # Prometheus's Docker service discovery (prometheus/prometheus.yml)
+    # keeps only containers carrying this label - the same label is added
+    # to every ds_server container spawned at runtime (load_balancer.py,
+    # shard_manager.py), so all three app types are discovered the same
+    # way regardless of how/when they were started.
+    labels:
+      - "monitoring=true"
     networks:
       pub: # Need to define net1 in the compose file
         aliases:
@@ -24,10 +31,49 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     # This share host’s the docker daemon with the container. Now, the container can spawn other containers just like host
     privileged: true # This should be true to share the docker daemon
+    # Deliberately no monitoring=true label here - shard_manager.py has no
+    # /metrics route (it's a background election/heartbeat loop, not a
+    # request-driven service the way the other two are), so Prometheus
+    # would just show it as a permanently-failing target for no reason.
     networks:
       pub: # Need to define net1 in the compose file
         aliases:
           - shard_manager_1 # Usually same as containername
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: prometheus
+    # Needs to read /var/run/docker.sock for service discovery - the
+    # official image runs as a non-root user by default, which can't read
+    # a root-owned socket, so this matches the same privilege the app
+    # containers already need for the same underlying reason.
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      pub:
+        aliases:
+          - prometheus
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: grafana
+    ports:
+      - "3000:3000" # the only one of the two new services exposed to the host - Prometheus itself stays internal
+    environment:
+      # Falls back to "admin" when no .env file sets this (e.g. CI's
+      # smoke-test, which throws the containers away immediately) - real
+      # deployments get a generated password from Ansible instead, via a
+      # .env file that's gitignored and never hardcoded here.
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      pub:
+        aliases:
+          - grafana
+    depends_on:
+      - prometheus
 
 networks:
   pub:

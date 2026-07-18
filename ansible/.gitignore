@@ -3,3 +3,7 @@
 inventory/hosts.ini
 
 *.retry
+
+# Generated Grafana admin password, cached here so repeated playbook runs
+# against the same checkout reuse it instead of rotating it every time.
+credentials/

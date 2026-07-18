@@ -6,6 +6,28 @@
     version: main
     force: true
 
+# Grafana ships with a default admin/admin login. Since its UI is exposed
+# to the host (terraform/main.tf opens grafana_port to 0.0.0.0/0), leaving
+# that default in place would be a real, avoidable hole. The password
+# lookup caches its result in a file on the control machine (this
+# Codespace/CI runner), so re-running the playbook against the same
+# checkout reuses the same password instead of rotating it on every
+# redeploy - a fresh checkout (e.g. a brand new CI run) does generate a
+# new one, since there's nothing to reuse yet.
+- name: Generate (or reuse) a random Grafana admin password
+  ansible.builtin.set_fact:
+    grafana_admin_password: "{{ lookup('password', playbook_dir + '/credentials/grafana_admin_password length=20 chars=ascii_letters,digits') }}"
+
+- name: Write the .env file docker-compose.yml reads GRAFANA_ADMIN_PASSWORD from
+  ansible.builtin.copy:
+    dest: "{{ app_dir }}/project/.env"
+    content: "GRAFANA_ADMIN_PASSWORD={{ grafana_admin_password }}\n"
+    mode: "0600"
+
+- name: Show the Grafana admin password
+  ansible.builtin.debug:
+    msg: "Grafana login -> user: admin, password: {{ grafana_admin_password }}"
+
 # Runs as the ubuntu user, no become/sudo - the docker role already put it
 # in the docker group and reset the connection so that membership is live.
 - name: Build and start the stack (make all)

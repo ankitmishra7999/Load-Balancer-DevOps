@@ -62,6 +62,12 @@
     port: "{{ app_port }}"
     proto: tcp
 
+- name: Allow the Grafana port through ufw
+  community.general.ufw:
+    rule: allow
+    port: "{{ grafana_port }}"
+    proto: tcp
+
 # A second, OS-level firewall behind the AWS security group. The two are
 # independent: the SG is enforced by AWS's network layer outside the
 # instance, ufw is enforced by the kernel inside it. Redundant on purpose -
